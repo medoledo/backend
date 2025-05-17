@@ -3,18 +3,18 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, BasePermission
 from .serializers import (
-    TeacherProfileSerializer, 
+    TeacherProfileSerializer,
     StudentProfileSerializer,
     UserSerializer,
     CenterSerializer
 )
 from .models import (
-    User, 
-    StudentProfile, 
-    TeacherProfile, 
-    AssistantProfile, 
-    Subject, 
-    Grade, 
+    User,
+    StudentProfile,
+    TeacherProfile,
+    AssistantProfile,
+    Subject,
+    Grade,
     Center,
     Payment
 )
@@ -22,6 +22,15 @@ from django.db.models import Q
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomTokenObtainPairSerializer
 from .permissions import  IsTeacher , IsStudent , IsAssistant , IsAdmin
+from rest_framework.views import APIView
+
+class PublicKeyView(APIView):
+    permission_classes = []
+
+    def get(self, request):
+        with open('/home/apitest144/backend/public.pem', 'r') as f:
+            public_key = f.read()
+        return Response({'public_key': public_key})
 
 # Composite Permission Classes
 class IsTeacherOrAdmin(BasePermission):
@@ -44,13 +53,20 @@ class IsAssistantOrAdmin(BasePermission):
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
+
+
+# accounts/views.py
+
+
+
+
 # Dashboard Views
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def admin_dashboard(request):
     if request.user.role != 'admin':
         return Response({'detail': 'Not authorized'}, status=status.HTTP_403_FORBIDDEN)
-    
+
     stats = {
         'teachers_count': TeacherProfile.objects.count(),
         'students_count': StudentProfile.objects.count(),
@@ -103,11 +119,11 @@ def create_student(request):
         'email': request.data.get('email', ''),
         'role': 'student'
     }
-    
+
     user_serializer = UserSerializer(data=user_data)
     if not user_serializer.is_valid():
         return Response(user_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
     try:
         user = user_serializer.save()
     except Exception as e:
@@ -141,7 +157,7 @@ def create_student(request):
         data=profile_data,
         context={'request': request, 'teacher': teacher}
     )
-    
+
     if serializer.is_valid():
         try:
             # Explicitly set user and teacher relationships
@@ -153,12 +169,12 @@ def create_student(request):
         except Exception as e:
             user.delete()
             return Response({'error': str(e)}, status=400)
-    
+
     # Cleanup if validation fails
     user.delete()
     return Response(serializer.errors, status=400)
-    
-    
+
+
 @api_view(['POST'])
 @permission_classes([IsAdmin])
 def approve_student(request, student_id):
@@ -179,8 +195,8 @@ def list_students(request):
     else:
         # For teachers and assistants, get their associated teacher
         teacher = (
-            request.user.teacher_profile 
-            if request.user.role == 'teacher' 
+            request.user.teacher_profile
+            if request.user.role == 'teacher'
             else request.user.assistant_profile.teacher
         )
         queryset = StudentProfile.objects.filter(teacher=teacher)
@@ -249,11 +265,11 @@ def create_teacher_profile(request):
         'email': request.data.get('email', ''),
         'role': 'teacher'
     }
-    
+
     user_serializer = UserSerializer(data=user_data)
     if not user_serializer.is_valid():
         return Response(user_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
     try:
         user = user_serializer.save()
     except Exception as e:
@@ -273,7 +289,7 @@ def create_teacher_profile(request):
         data=profile_data,
         context={'request': request}
     )
-    
+
     if serializer.is_valid():
         try:
             # Explicitly set the user relationship
@@ -285,7 +301,7 @@ def create_teacher_profile(request):
         except Exception as e:
             user.delete()
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    
+
     # Cleanup if validation fails
     user.delete()
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -338,7 +354,7 @@ def teacher_detail(request, pk):
 @permission_classes([IsTeacherOrAdmin])
 def create_assistant(request):
     teacher = request.user.teacher_profile if request.user.role == 'teacher' else TeacherProfile.objects.get(pk=request.data.get('teacher_id'))
-    
+
     # Create User account first
     user_data = {
         'username': request.data.get('username'),
@@ -346,13 +362,13 @@ def create_assistant(request):
         'email': request.data.get('email', ''),
         'role': 'assistant'
     }
-    
+
     user_serializer = UserSerializer(data=user_data)
     if not user_serializer.is_valid():
         return Response(user_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
     user = user_serializer.save()
-    
+
     # Create AssistantProfile
     profile_data = {
         'user': user.id,
@@ -361,7 +377,7 @@ def create_assistant(request):
         'phone_number': request.data.get('phone_number'),
         'gender': request.data.get('gender')
     }
-    
+
     try:
         AssistantProfile.objects.create(
             user=user,
@@ -386,7 +402,7 @@ def view_assistants(request):
             assistants = AssistantProfile.objects.filter(teacher_id=teacher_id)
         else:
             assistants = AssistantProfile.objects.all()
-    
+
     data = [{
         'id': a.id,
         'username': a.user.username,
@@ -395,7 +411,7 @@ def view_assistants(request):
         'gender': a.gender,
         'teacher': a.teacher.full_name
     } for a in assistants]
-    
+
     return Response(data, status=status.HTTP_200_OK)
 
 @api_view(['PATCH'])
@@ -412,10 +428,10 @@ def update_assistant(request, assistant_id):
     data = request.data
     allowed_fields = ['full_name', 'phone_number', 'gender']
     updates = {k: data[k] for k in allowed_fields if k in data}
-    
+
     for field, value in updates.items():
         setattr(assistant, field, value)
-    
+
     assistant.save()
     return Response({'message': 'Assistant updated successfully'}, status=status.HTTP_200_OK)
 
@@ -441,7 +457,7 @@ def delete_assistant(request, assistant_id):
 def create_center(request):
     if request.user.role == 'teacher':
         request.data['teacher'] = request.user.teacher_profile.id
-    
+
     serializer = CenterSerializer(data=request.data, context={'request': request})
     if serializer.is_valid():
         serializer.save()
@@ -459,7 +475,7 @@ def list_centers(request):
         centers = Center.objects.filter(teacher=request.user.assistant_profile.teacher)
     else:  # student
         centers = Center.objects.filter(id=request.user.student_profile.center_id)
-    
+
     serializer = CenterSerializer(centers, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
